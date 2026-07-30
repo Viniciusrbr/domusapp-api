@@ -1,0 +1,228 @@
+// Domus — schema.prisma
+// Modelagem baseada no documento de requisitos (MVP + estruturas de Fase 2).
+//
+// Convenções de data/hora (RN21–23 / RNF06):
+//   - Instantes  -> @db.Timestamptz(3), sempre em UTC.
+//   - Datas da grade de recorrência (startDate, nextDueDate) -> @db.Date, sem fuso.
+//   - O "hoje" do cálculo de status é o dia LOCAL de quem visualiza (fuso do cliente).
+//
+// "Casa ativa" (RN19) é intencionalmente ausente: é estado de UI no cliente,
+// nunca autorização — o servidor valida membership em toda requisição.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum FrequencyUnit {
+  DAY
+  WEEK
+  MONTH
+}
+
+// ============================================================
+// Usuário e autenticação
+// ============================================================
+
+model User {
+  id           String   @id @default(cuid())
+  name         String   @db.VarChar(120)
+  email        String   @unique @db.VarChar(255) // único no sistema (RN25)
+  passwordHash String // hash argon2, nunca texto puro (RNF07)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  memberships         Membership[]
+  executions          TaskExecution[]      @relation("ExecutedBy")
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  invitesCreated      Invite[]             @relation("InviteCreatedBy") // Fase 2
+
+  @@map("users")
+}
+
+// Refresh token rotativo persistido (RNF08). Guarda-se o HASH do token.
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3) // rotação: o token anterior é revogado ao emitir um novo
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// Recuperação de senha por e-mail (RF03). Guarda-se o HASH do token.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ============================================================
+// Household e participação
+// ============================================================
+
+model Household {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(120)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  memberships Membership[]
+  tasks       Task[]
+  categories  Category[]
+  invites     Invite[] // Fase 2
+
+  @@map("households")
+}
+
+// Junção user <-> household (MVP, mesmo com casas solo — RN15).
+// O OWNER é a membership com role = OWNER (fonte única da verdade). A invariante
+// "exatamente um owner por casa" (RN16) é validada na aplicação; para travar no
+// banco, adicionar via migration um índice único parcial em (householdId) WHERE role = 'OWNER'.
+// Excluir a casa remove suas memberships em cascata (RF09).
+model Membership {
+  id          String   @id @default(cuid())
+  userId      String
+  householdId String
+  role        Role     @default(MEMBER)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, householdId]) // participa de cada casa no máximo uma vez
+  @@index([householdId])
+  @@map("memberships")
+}
+
+// ============================================================
+// Categorias
+// ============================================================
+
+// Pertencem a uma casa; nome único dentro da casa; independentes entre casas (RN12).
+// Excluir a casa remove suas categorias em cascata (RF09).
+model Category {
+  id          String   @id @default(cuid())
+  householdId String
+  name        String   @db.VarChar(60)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+
+  @@unique([householdId, name])
+  @@index([householdId])
+  @@map("categories")
+}
+
+// ============================================================
+// Tarefas recorrentes
+// ============================================================
+
+model Task {
+  id            String        @id @default(cuid())
+  householdId   String
+  categoryId    String? // 0 ou 1 categoria (RN13); vira null se a categoria for excluída (RN14)
+  name          String        @db.VarChar(100) // RN02
+  description   String? // opcional
+  frequency     Int // inteiro >= 1 (RN03) — validado na aplicação; opcionalmente um CHECK via migration
+  frequencyUnit FrequencyUnit
+
+  // --- Grade de recorrência (datas de calendário, sem fuso — RN22/RNF06) ---
+  startDate   DateTime @db.Date
+  // Posição atual na grade fixa ancorada em startDate = "próxima execução prevista".
+  // Inicia igual a startDate; a cada conclusão avança (prevista anterior + frequência),
+  // NUNCA a partir da data real de conclusão (RN05/RN06). Se a nova prevista já estiver
+  // no passado, a tarefa permanece vencida (RN07). O status derivado
+  // (agendada / em dia / vence hoje / vencida) é calculado a partir daqui contra o dia
+  // local de quem visualiza (RN08/RN23) e NÃO é armazenado.
+  nextDueDate DateTime @db.Date
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  household  Household       @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category   Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  executions TaskExecution[]
+
+  @@index([householdId, nextDueDate]) // consulta de pendentes: nextDueDate <= hoje_local (RF15)
+  @@index([categoryId])
+  @@map("tasks")
+}
+
+// ============================================================
+// Histórico de execuções
+// ============================================================
+
+// Registra membro executor + instante (RN10). Excluir a tarefa remove seu
+// histórico em cascata (RN11).
+model TaskExecution {
+  id           String   @id @default(cuid())
+  taskId       String
+  executedById String
+  executedAt   DateTime @default(now()) @db.Timestamptz(3) // instante em UTC (RN21)
+
+  task       Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  // Restrict preserva a integridade do histórico (RN32): a execução referencia o
+  // usuário permanentemente. Exibir ou ocultar o nome de quem saiu é decidido na
+  // CONSULTA (o usuário ainda tem membership nesta casa?), não zerando o dado.
+  executedBy User @relation("ExecutedBy", fields: [executedById], references: [id], onDelete: Restrict)
+
+  @@index([taskId])
+  @@index([executedById])
+  @@map("task_executions")
+}
+
+// ============================================================
+// Convites — Fase 2
+// ============================================================
+
+// Gerados/revogados apenas pelo owner (RN29). Guarda-se o HASH do token.
+// Expiração obrigatória; padrão de 7 dias aplicado na aplicação (RN30).
+model Invite {
+  id          String    @id @default(cuid())
+  householdId String
+  tokenHash   String    @unique
+  role        Role      @default(MEMBER) // papel concedido ao aceitar
+  createdById String
+  expiresAt   DateTime  @db.Timestamptz(3)
+  revokedAt   DateTime? @db.Timestamptz(3)
+  usedAt      DateTime? @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("InviteCreatedBy", fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("invites")
+}
