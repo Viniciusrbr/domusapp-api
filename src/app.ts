@@ -1,4 +1,5 @@
 import fastifyCookie from "@fastify/cookie";
+import fastifyCors from "@fastify/cors";
 import fastifyJwt from "@fastify/jwt";
 import fastifySwagger from "@fastify/swagger";
 import fastifyApiReference from "@scalar/fastify-api-reference";
@@ -18,6 +19,11 @@ export const app = fastify();
 
 app.setValidatorCompiler(validatorCompiler);
 app.setSerializerCompiler(serializerCompiler);
+
+app.register(fastifyCors, {
+	origin: env.CORS_ORIGINS,
+	credentials: true,
+});
 
 app.register(fastifyJwt, {
 	secret: env.JWT_SECRET,
