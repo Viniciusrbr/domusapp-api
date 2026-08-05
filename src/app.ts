@@ -1,113 +1,116 @@
-import fastifyCookie from '@fastify/cookie'
-import fastifyJwt from '@fastify/jwt'
-import fastifySwagger from '@fastify/swagger'
-import fastifyApiReference from '@scalar/fastify-api-reference'
-import fastify, { type FastifyError } from 'fastify'
+import fastifyCookie from "@fastify/cookie";
+import fastifyJwt from "@fastify/jwt";
+import fastifySwagger from "@fastify/swagger";
+import fastifyApiReference from "@scalar/fastify-api-reference";
+import fastify, { type FastifyError } from "fastify";
 import {
-  hasZodFastifySchemaValidationErrors,
-  isResponseSerializationError,
-  jsonSchemaTransform,
-  serializerCompiler,
-  validatorCompiler,
-  type ZodTypeProvider,
-} from 'fastify-type-provider-zod'
-import { env } from './env'
+	hasZodFastifySchemaValidationErrors,
+	isResponseSerializationError,
+	jsonSchemaTransform,
+	serializerCompiler,
+	validatorCompiler,
+	type ZodTypeProvider,
+} from "fastify-type-provider-zod";
+import { usersRoutes } from "./controllers/users/routes";
+import { env } from "./env";
 
-export const app = fastify()
+export const app = fastify();
+
+app.setValidatorCompiler(validatorCompiler);
+app.setSerializerCompiler(serializerCompiler);
 
 app.register(fastifyJwt, {
-  secret: env.JWT_SECRET,
-  cookie: {
-    cookieName: 'refreshToken',
-    signed: false,
-  },
-  sign: {
-    expiresIn: '10m',
-  },
-})
+	secret: env.JWT_SECRET,
+	cookie: {
+		cookieName: "refreshToken",
+		signed: false,
+	},
+	sign: {
+		expiresIn: "10m",
+	},
+});
 
-app.setValidatorCompiler(validatorCompiler)
-app.setSerializerCompiler(serializerCompiler)
+app.register(fastifyCookie);
 
 await app.register(fastifySwagger, {
-  openapi: {
-    info: {
-      title: 'Domus API',
-      description: 'API for the Domus application.',
-      version: '1.0.0',
-    },
-    servers: [
-      {
-        description: 'API Base URL',
-        url: env.API_BASE_URL,
-      },
-    ],
-  },
-  transform: jsonSchemaTransform,
-})
+	openapi: {
+		info: {
+			title: "Domus API",
+			description: "API for the Domus application.",
+			version: "1.0.0",
+		},
+		servers: [
+			{
+				description: "API Base URL",
+				url: env.API_BASE_URL,
+			},
+		],
+	},
+	transform: jsonSchemaTransform,
+});
 
 app.register(fastifyApiReference, {
-  routePrefix: '/docs',
-  configuration: {
-    sources: [
-      {
-        title: 'Domus API',
-        slug: 'domus-api',
-        url: '/swagger.json',
-      },
-    ],
-  },
-})
+	routePrefix: "/docs",
+	configuration: {
+		sources: [
+			{
+				title: "Domus API",
+				slug: "domus-api",
+				url: "/swagger.json",
+			},
+		],
+	},
+});
+
+app.register(usersRoutes);
 
 app.withTypeProvider<ZodTypeProvider>().route({
-  method: 'GET',
-  url: '/swagger.json',
-  schema: {
-    hide: true,
-  },
-  handler: async () => {
-    return app.swagger()
-  },
-})
-
-app.register(fastifyCookie)
+	method: "GET",
+	url: "/swagger.json",
+	schema: {
+		hide: true,
+	},
+	handler: async () => {
+		return app.swagger();
+	},
+});
 
 app.setErrorHandler((error: FastifyError, _, reply) => {
-  // Request validation errors (body/params/querystring) -> 400
-  if (hasZodFastifySchemaValidationErrors(error)) {
-    return reply.status(400).send({
-      message: 'Validation error.',
-      issues: error.validation,
-    })
-  }
+	// Request validation errors (body/params/querystring) -> 400
+	if (hasZodFastifySchemaValidationErrors(error)) {
+		return reply.status(400).send({
+			message: "Validation error.",
+			issues: error.validation,
+		});
+	}
 
-  // The response we produced does not match its own schema -> our bug, 500
-  if (isResponseSerializationError(error)) {
-    if (env.NODE_ENV !== 'production') {
-      console.error(
-        `Response validation error on ${error.method} ${error.url}:`,
-        error.cause.issues,
-      )
-    }
-    return reply.status(500).send({
-      message: 'Internal server error.',
-    })
-  }
+	// The response we produced does not match its own schema -> our bug, 500
+	if (isResponseSerializationError(error)) {
+		if (env.NODE_ENV !== "production") {
+			console.error(
+				`Response validation error on ${error.method} ${error.url}:`,
+				error.cause.issues,
+			);
+		}
+		return reply.status(500).send({
+			message: "Internal server error.",
+		});
+	}
 
-  // Errors that already carry a client-side HTTP status -> respect it
-  if (typeof error.statusCode === 'number' && error.statusCode < 500) {
-    return reply.status(error.statusCode).send({
-      message: error.message,
-    })
-  }
+	// Errors that already carry a client-side HTTP status -> respect it
+	if (typeof error.statusCode === "number" && error.statusCode < 500) {
+		return reply.status(error.statusCode).send({
+			message: error.message,
+		});
+	}
 
-  if (env.NODE_ENV !== 'production') {
-    console.error(error)
-  } else {
-    // TODO: Log error to an external service like Sentry, LogRocket, etc.
-  }
+	if (env.NODE_ENV !== "production") {
+		console.error(error);
+	} else {
+		// TODO: Log error to an external service like Sentry, LogRocket, etc.
+	}
 
-  return reply.status(500).send({
-    message: 'Internal server error.',
-  })
-})
+	return reply.status(500).send({
+		message: "Internal server error.",
+	});
+});
