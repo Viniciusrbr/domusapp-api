@@ -29,4 +29,16 @@ export class InMemoryUsersRepository implements UsersRepository {
 
 		return user;
 	}
+
+	async save(user: User) {
+		const index = this.items.findIndex((item) => item.id === user.id);
+
+		if (index >= 0) {
+			this.items[index] = { ...user, updatedAt: new Date() };
+
+			return this.items[index];
+		}
+
+		return user;
+	}
 }

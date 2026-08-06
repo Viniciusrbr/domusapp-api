@@ -1,5 +1,12 @@
 {
-	"permissions": {
-		"allow": ["Bash(npx vitest *)", "Bash(npx tsx *)"]
-	}
+  "permissions": {
+    "allow": [
+      "Bash(npx vitest *)",
+      "Bash(npx tsx *)",
+      "PowerShell(npx tsc --noEmit)",
+      "PowerShell(npm test)",
+      "PowerShell(npm run check)",
+      "PowerShell(npm test 2>&1)"
+    ]
+  }
 }

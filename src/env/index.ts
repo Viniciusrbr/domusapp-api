@@ -6,6 +6,8 @@ const envSchema = z.object({
 	JWT_SECRET: z.string(),
 	PORT: z.coerce.number().default(8000),
 	API_BASE_URL: z.url().default("http://localhost:8000"),
+	// Base do app cliente — usada para montar o link de reset de senha (RF03).
+	WEB_APP_URL: z.url().default("http://localhost:3000"),
 	DATABASE_URL: z.url(),
 	CORS_ORIGINS: z
 		.string()
