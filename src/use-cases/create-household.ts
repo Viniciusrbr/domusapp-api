@@ -11,7 +11,7 @@ interface CreateHouseholdUseCaseResponse {
 }
 
 export class CreateHouseholdUseCase {
-	constructor(private householdsRepository: HouseholdsRepository) { }
+	constructor(private householdsRepository: HouseholdsRepository) {}
 
 	async execute({
 		name,

@@ -17,7 +17,7 @@ export class UpdateHouseholdUseCase {
 	constructor(
 		private householdsRepository: HouseholdsRepository,
 		private membershipsRepository: MembershipsRepository,
-	) { }
+	) {}
 
 	async execute({
 		householdId,

@@ -11,7 +11,10 @@ export default defineConfig({
 				test: {
 					name: "unit",
 					environment: "node",
-					include: ["src/test/use-cases/**/*.test.ts"],
+					include: [
+						"src/test/use-cases/**/*.test.ts",
+						"src/test/lib/**/*.test.ts",
+					],
 				},
 			},
 			{
