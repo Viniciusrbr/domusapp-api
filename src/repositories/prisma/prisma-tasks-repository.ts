@@ -9,6 +9,7 @@ import type {
 export class PrismaTasksRepository implements TasksRepository {
 	async create({
 		householdId,
+		categoryId,
 		name,
 		description,
 		frequency,
@@ -18,6 +19,7 @@ export class PrismaTasksRepository implements TasksRepository {
 		return prisma.task.create({
 			data: {
 				householdId,
+				categoryId: categoryId ?? null,
 				name,
 				description: description ?? null,
 				frequency,
@@ -46,6 +48,7 @@ export class PrismaTasksRepository implements TasksRepository {
 			data: {
 				name: task.name,
 				description: task.description,
+				categoryId: task.categoryId,
 			},
 		});
 	}

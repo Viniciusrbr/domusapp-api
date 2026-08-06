@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseDateOnly } from "@/lib/recurrence";
+import { InMemoryCategoriesRepository } from "@/repositories/in-memory/in-memory-categories-repository";
 import { InMemoryHouseholdsRepository } from "@/repositories/in-memory/in-memory-households-repository";
 import { InMemoryMembershipsRepository } from "@/repositories/in-memory/in-memory-memberships-repository";
 import { InMemoryTasksRepository } from "@/repositories/in-memory/in-memory-tasks-repository";
@@ -12,6 +13,7 @@ let usersRepository: InMemoryUsersRepository;
 let membershipsRepository: InMemoryMembershipsRepository;
 let householdsRepository: InMemoryHouseholdsRepository;
 let tasksRepository: InMemoryTasksRepository;
+let categoriesRepository: InMemoryCategoriesRepository;
 let sut: CreateTaskUseCase;
 let householdId: string;
 
@@ -23,7 +25,12 @@ describe("Create Task Use Case", () => {
 			membershipsRepository,
 		);
 		tasksRepository = new InMemoryTasksRepository(usersRepository);
-		sut = new CreateTaskUseCase(tasksRepository, membershipsRepository);
+		categoriesRepository = new InMemoryCategoriesRepository(tasksRepository);
+		sut = new CreateTaskUseCase(
+			tasksRepository,
+			membershipsRepository,
+			categoriesRepository,
+		);
 
 		const household = await householdsRepository.create({
 			name: "Casa da Praia",
@@ -94,6 +101,65 @@ describe("Create Task Use Case", () => {
 				startDate: parseDateOnly("2026-03-10"),
 			}),
 		).rejects.toBeInstanceOf(InvalidFrequencyError);
+	});
+
+	it("should be able to create a task with a category from the same household", async () => {
+		const category = await categoriesRepository.create({
+			householdId,
+			name: "Lazer",
+		});
+
+		const { task } = await sut.execute({
+			householdId,
+			userId: "user-01",
+			categoryId: category.id,
+			name: "Regar as plantas",
+			frequency: 1,
+			frequencyUnit: "DAY",
+			startDate: parseDateOnly("2026-03-10"),
+		});
+
+		expect(task.categoryId).toEqual(category.id);
+	});
+
+	it("should not be able to create a task with a category from another household", async () => {
+		const otherHousehold = await householdsRepository.create({
+			name: "Casa da Serra",
+			ownerId: "user-01",
+		});
+
+		const foreignCategory = await categoriesRepository.create({
+			householdId: otherHousehold.id,
+			name: "Jardim",
+		});
+
+		await expect(() =>
+			sut.execute({
+				householdId,
+				userId: "user-01",
+				categoryId: foreignCategory.id,
+				name: "Regar as plantas",
+				frequency: 1,
+				frequencyUnit: "DAY",
+				startDate: parseDateOnly("2026-03-10"),
+			}),
+		).rejects.toBeInstanceOf(ResourceNotFoundError);
+
+		expect(tasksRepository.items).toHaveLength(0);
+	});
+
+	it("should not be able to create a task with a non-existing category", async () => {
+		await expect(() =>
+			sut.execute({
+				householdId,
+				userId: "user-01",
+				categoryId: "non-existing-category",
+				name: "Regar as plantas",
+				frequency: 1,
+				frequencyUnit: "DAY",
+				startDate: parseDateOnly("2026-03-10"),
+			}),
+		).rejects.toBeInstanceOf(ResourceNotFoundError);
 	});
 
 	it("should not be able to create a task in a household the user does not belong to", async () => {

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { parseDateOnly } from "@/lib/recurrence";
+import { InMemoryCategoriesRepository } from "@/repositories/in-memory/in-memory-categories-repository";
 import { InMemoryHouseholdsRepository } from "@/repositories/in-memory/in-memory-households-repository";
 import { InMemoryMembershipsRepository } from "@/repositories/in-memory/in-memory-memberships-repository";
 import { InMemoryTasksRepository } from "@/repositories/in-memory/in-memory-tasks-repository";
@@ -11,6 +12,7 @@ let usersRepository: InMemoryUsersRepository;
 let membershipsRepository: InMemoryMembershipsRepository;
 let householdsRepository: InMemoryHouseholdsRepository;
 let tasksRepository: InMemoryTasksRepository;
+let categoriesRepository: InMemoryCategoriesRepository;
 let sut: UpdateTaskUseCase;
 let householdId: string;
 
@@ -32,7 +34,12 @@ describe("Update Task Use Case", () => {
 			membershipsRepository,
 		);
 		tasksRepository = new InMemoryTasksRepository(usersRepository);
-		sut = new UpdateTaskUseCase(tasksRepository, membershipsRepository);
+		categoriesRepository = new InMemoryCategoriesRepository(tasksRepository);
+		sut = new UpdateTaskUseCase(
+			tasksRepository,
+			membershipsRepository,
+			categoriesRepository,
+		);
 
 		const household = await householdsRepository.create({
 			name: "Casa da Praia",
@@ -83,6 +90,96 @@ describe("Update Task Use Case", () => {
 		expect(task.frequencyUnit).toEqual(created.frequencyUnit);
 		expect(task.startDate).toEqual(created.startDate);
 		expect(task.nextDueDate).toEqual(created.nextDueDate);
+	});
+
+	it("should be able to assign a category from the same household", async () => {
+		const created = await createTask();
+
+		const category = await categoriesRepository.create({
+			householdId,
+			name: "Limpeza",
+		});
+
+		const { task } = await sut.execute({
+			taskId: created.id,
+			userId: "user-01",
+			categoryId: category.id,
+		});
+
+		expect(task.categoryId).toEqual(category.id);
+		expect(tasksRepository.items[0].categoryId).toEqual(category.id);
+	});
+
+	it("should be able to remove the category with null", async () => {
+		const category = await categoriesRepository.create({
+			householdId,
+			name: "Limpeza",
+		});
+
+		const created = await tasksRepository.create({
+			householdId,
+			categoryId: category.id,
+			name: "Limpar o banheiro",
+			frequency: 1,
+			frequencyUnit: "WEEK",
+			startDate: parseDateOnly("2026-03-10"),
+		});
+
+		const { task } = await sut.execute({
+			taskId: created.id,
+			userId: "user-01",
+			categoryId: null,
+		});
+
+		expect(task.categoryId).toBeNull();
+	});
+
+	it("should keep the current category when categoryId is not informed", async () => {
+		const category = await categoriesRepository.create({
+			householdId,
+			name: "Limpeza",
+		});
+
+		const created = await tasksRepository.create({
+			householdId,
+			categoryId: category.id,
+			name: "Limpar o banheiro",
+			frequency: 1,
+			frequencyUnit: "WEEK",
+			startDate: parseDateOnly("2026-03-10"),
+		});
+
+		const { task } = await sut.execute({
+			taskId: created.id,
+			userId: "user-01",
+			name: "Outro nome",
+		});
+
+		expect(task.categoryId).toEqual(category.id);
+	});
+
+	it("should not be able to assign a category from another household", async () => {
+		const created = await createTask();
+
+		const otherHousehold = await householdsRepository.create({
+			name: "Casa da Serra",
+			ownerId: "user-01",
+		});
+
+		const foreignCategory = await categoriesRepository.create({
+			householdId: otherHousehold.id,
+			name: "Jardim",
+		});
+
+		await expect(() =>
+			sut.execute({
+				taskId: created.id,
+				userId: "user-01",
+				categoryId: foreignCategory.id,
+			}),
+		).rejects.toBeInstanceOf(ResourceNotFoundError);
+
+		expect(tasksRepository.items[0].categoryId).toBeNull();
 	});
 
 	it("should not be able to update a task from a household the user does not belong to", async () => {

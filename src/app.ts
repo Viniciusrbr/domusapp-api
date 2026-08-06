@@ -12,6 +12,7 @@ import {
 	validatorCompiler,
 	type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { categoriesRoutes } from "./controllers/categories/routes";
 import { householdsRoutes } from "./controllers/households/routes";
 import { tasksRoutes } from "./controllers/tasks/routes";
 import { usersRoutes } from "./controllers/users/routes";
@@ -72,6 +73,7 @@ app.register(fastifyApiReference, {
 
 app.register(usersRoutes);
 app.register(householdsRoutes);
+app.register(categoriesRoutes);
 app.register(tasksRoutes);
 
 app.withTypeProvider<ZodTypeProvider>().route({

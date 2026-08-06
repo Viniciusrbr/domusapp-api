@@ -1,8 +1,5 @@
 {
-  "permissions": {
-    "allow": [
-      "Bash(npx vitest *)",
-      "Bash(npx tsx *)"
-    ]
-  }
+	"permissions": {
+		"allow": ["Bash(npx vitest *)", "Bash(npx tsx *)"]
+	}
 }

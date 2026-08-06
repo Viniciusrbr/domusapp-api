@@ -1,5 +1,6 @@
 import type { Task } from "@/generated/client/client";
 import type { FrequencyUnit } from "@/generated/client/enums";
+import type { CategoriesRepository } from "@/repositories/categories-repository";
 import type { MembershipsRepository } from "@/repositories/memberships-repository";
 import type { TasksRepository } from "@/repositories/tasks-repository";
 import { InvalidFrequencyError } from "@/use-cases/errors/invalid-frequency-error";
@@ -8,6 +9,7 @@ import { ResourceNotFoundError } from "@/use-cases/errors/resource-not-found-err
 interface CreateTaskUseCaseRequest {
 	householdId: string;
 	userId: string;
+	categoryId?: string | null;
 	name: string;
 	description?: string | null;
 	frequency: number;
@@ -23,11 +25,13 @@ export class CreateTaskUseCase {
 	constructor(
 		private tasksRepository: TasksRepository,
 		private membershipsRepository: MembershipsRepository,
+		private categoriesRepository: CategoriesRepository,
 	) {}
 
 	async execute({
 		householdId,
 		userId,
+		categoryId,
 		name,
 		description,
 		frequency,
@@ -51,9 +55,21 @@ export class CreateTaskUseCase {
 			throw new ResourceNotFoundError();
 		}
 
+		// RN13: no máximo uma categoria, e ela tem de ser DESTA casa.
+		if (categoryId) {
+			const category = await this.categoriesRepository.findById(categoryId);
+
+			// Categoria de outra casa é tratada como inexistente: não se confirma
+			// a existência de recurso de casa alheia.
+			if (!category || category.householdId !== householdId) {
+				throw new ResourceNotFoundError();
+			}
+		}
+
 		// RN04: `startDate` no passado é permitido — a tarefa já nasce vencida.
 		const task = await this.tasksRepository.create({
 			householdId,
+			categoryId,
 			name,
 			description,
 			frequency,

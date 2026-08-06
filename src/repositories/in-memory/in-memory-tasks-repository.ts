@@ -20,6 +20,7 @@ export class InMemoryTasksRepository implements TasksRepository {
 
 	async create({
 		householdId,
+		categoryId,
 		name,
 		description,
 		frequency,
@@ -29,7 +30,7 @@ export class InMemoryTasksRepository implements TasksRepository {
 		const task: Task = {
 			id: randomUUID(),
 			householdId,
-			categoryId: null,
+			categoryId: categoryId ?? null,
 			name,
 			description: description ?? null,
 			frequency,

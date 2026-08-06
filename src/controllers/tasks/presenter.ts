@@ -12,6 +12,7 @@ type TaskResponse = z.infer<typeof taskSchema>;
 export const toTaskResponse = (task: Task): TaskResponse => ({
 	id: task.id,
 	householdId: task.householdId,
+	categoryId: task.categoryId,
 	name: task.name,
 	description: task.description,
 	frequency: task.frequency,

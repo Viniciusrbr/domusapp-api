@@ -3,6 +3,8 @@ import type { FrequencyUnit } from "@/generated/client/enums";
 
 export interface CreateTaskData {
 	householdId: string;
+	/** 0 ou 1 categoria, sempre da mesma casa da tarefa (RN13). */
+	categoryId?: string | null;
 	name: string;
 	description?: string | null;
 	frequency: number;

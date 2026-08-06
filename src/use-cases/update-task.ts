@@ -1,4 +1,5 @@
 import type { Task } from "@/generated/client/client";
+import type { CategoriesRepository } from "@/repositories/categories-repository";
 import type { MembershipsRepository } from "@/repositories/memberships-repository";
 import type { TasksRepository } from "@/repositories/tasks-repository";
 import { ResourceNotFoundError } from "@/use-cases/errors/resource-not-found-error";
@@ -8,6 +9,8 @@ interface UpdateTaskUseCaseRequest {
 	userId: string;
 	name?: string;
 	description?: string | null;
+	/** `undefined` mantém a categoria atual; `null` remove o vínculo. */
+	categoryId?: string | null;
 }
 
 interface UpdateTaskUseCaseResponse {
@@ -18,6 +21,7 @@ export class UpdateTaskUseCase {
 	constructor(
 		private tasksRepository: TasksRepository,
 		private membershipsRepository: MembershipsRepository,
+		private categoriesRepository: CategoriesRepository,
 	) {}
 
 	async execute({
@@ -25,6 +29,7 @@ export class UpdateTaskUseCase {
 		userId,
 		name,
 		description,
+		categoryId,
 	}: UpdateTaskUseCaseRequest): Promise<UpdateTaskUseCaseResponse> {
 		const task = await this.tasksRepository.findById(taskId);
 
@@ -51,6 +56,20 @@ export class UpdateTaskUseCase {
 
 		if (description !== undefined) {
 			task.description = description;
+		}
+
+		// RN13: `null` desvincula; um id precisa apontar para categoria DESTA casa.
+		if (categoryId !== undefined) {
+			if (categoryId !== null) {
+				const category = await this.categoriesRepository.findById(categoryId);
+
+				// Categoria de outra casa é tratada como inexistente.
+				if (!category || category.householdId !== task.householdId) {
+					throw new ResourceNotFoundError();
+				}
+			}
+
+			task.categoryId = categoryId;
 		}
 
 		const updatedTask = await this.tasksRepository.save(task);

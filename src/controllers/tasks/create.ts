@@ -17,7 +17,7 @@ export async function create(
 	reply: FastifyReply,
 ) {
 	const { householdId } = request.params;
-	const { name, description, frequency, frequencyUnit, startDate } =
+	const { name, description, frequency, frequencyUnit, startDate, categoryId } =
 		request.body;
 
 	try {
@@ -31,6 +31,7 @@ export async function create(
 			frequency,
 			frequencyUnit,
 			startDate: parseDateOnly(startDate),
+			categoryId,
 		});
 
 		return reply.status(201).send({ task: toTaskResponse(task) });

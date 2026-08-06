@@ -9,7 +9,7 @@ export async function update(
 	reply: FastifyReply,
 ) {
 	const { taskId } = request.params;
-	const { name, description } = request.body;
+	const { name, description, categoryId } = request.body;
 
 	try {
 		const updateTaskUseCase = makeUpdateTaskUseCase();
@@ -19,6 +19,7 @@ export async function update(
 			userId: request.user.sub,
 			name,
 			description,
+			categoryId,
 		});
 
 		return reply.status(200).send({ task: toTaskResponse(task) });

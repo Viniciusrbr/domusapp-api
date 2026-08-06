@@ -21,25 +21,34 @@ const frequencyUnitSchema = z.enum(["DAY", "WEEK", "MONTH"]);
 /** Data de calendário "YYYY-MM-DD" — sem hora e sem fuso (RN22/RNF06). */
 const dateOnlySchema = z.iso.date();
 
+/** RN13: 0 ou 1 categoria, sempre da mesma casa da tarefa. */
+const categoryIdSchema = z.string().min(1);
+
 export const createTaskBodySchema = z.object({
 	name: taskNameSchema,
 	description: taskDescriptionSchema.optional(),
 	frequency: frequencySchema,
 	frequencyUnit: frequencyUnitSchema,
 	startDate: dateOnlySchema,
+	categoryId: categoryIdSchema.nullable().optional(),
 });
 
 export type CreateTaskBody = z.infer<typeof createTaskBodySchema>;
 
-// Nesta fatia só nome e descrição são editáveis: frequência e startDate mexem
-// na grade de recorrência e exigem decisão de recomputo do `nextDueDate`.
+// Nesta fatia só nome, descrição e categoria são editáveis: frequência e startDate
+// mexem na grade de recorrência e exigem decisão de recomputo do `nextDueDate`.
+// `categoryId: null` remove o vínculo; ausente mantém a categoria atual.
 export const updateTaskBodySchema = z
 	.object({
 		name: taskNameSchema.optional(),
 		description: taskDescriptionSchema.optional(),
+		categoryId: categoryIdSchema.nullable().optional(),
 	})
 	.refine(
-		(body) => body.name !== undefined || body.description !== undefined,
+		(body) =>
+			body.name !== undefined ||
+			body.description !== undefined ||
+			body.categoryId !== undefined,
 		"Informe ao menos um campo para atualizar.",
 	);
 
@@ -60,6 +69,7 @@ export type TaskParams = z.infer<typeof taskParamsSchema>;
 export const taskSchema = z.object({
 	id: z.string(),
 	householdId: z.string(),
+	categoryId: z.string().nullable(),
 	name: z.string(),
 	description: z.string().nullable(),
 	frequency: z.int(),
