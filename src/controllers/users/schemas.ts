@@ -34,6 +34,11 @@ export const authenticateResponseSchema = z.object({
 	token: z.string(),
 });
 
+// O novo refresh token volta no cookie httpOnly; o corpo carrega só o access token.
+export const refreshTokenResponseSchema = z.object({
+	token: z.string(),
+});
+
 export const messageResponseSchema = z.object({
 	message: z.string(),
 });

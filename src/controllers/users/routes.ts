@@ -3,7 +3,9 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { authenticate } from "@/controllers/users/authenticate";
 import { forgotPassword } from "@/controllers/users/forgot-password";
+import { logout } from "@/controllers/users/logout";
 import { profile } from "@/controllers/users/profile";
+import { refreshToken } from "@/controllers/users/refresh-token";
 import { register } from "@/controllers/users/register";
 import { resetPassword } from "@/controllers/users/reset-password";
 import {
@@ -11,6 +13,7 @@ import {
 	authenticateResponseSchema,
 	forgotPasswordBodySchema,
 	messageResponseSchema,
+	refreshTokenResponseSchema,
 	registerBodySchema,
 	resetPasswordBodySchema,
 	updateUserProfileBodySchema,
@@ -55,6 +58,45 @@ export async function usersRoutes(app: FastifyInstance) {
 			},
 		},
 		authenticate,
+	);
+
+	server.post(
+		"/token/refresh",
+		{
+			schema: {
+				tags: ["Users"],
+				summary: "Rotaciona o refresh token e emite um novo access token",
+				description:
+					"Lê o refresh token do cookie httpOnly, revoga o atual e emite um novo par (RNF08).",
+				operationId: "refreshToken",
+				response: {
+					200: refreshTokenResponseSchema.describe(
+						"Novo par de tokens emitido",
+					),
+					401: messageResponseSchema.describe(
+						"Refresh token ausente, inválido, revogado ou expirado",
+					),
+				},
+			},
+		},
+		refreshToken,
+	);
+
+	server.post(
+		"/sessions/logout",
+		{
+			schema: {
+				tags: ["Users"],
+				summary: "Encerra a sessão atual",
+				description:
+					"Revoga o refresh token atual e limpa o cookie. Responde 204 mesmo sem sessão ativa.",
+				operationId: "logout",
+				response: {
+					204: z.null().describe("Sessão encerrada"),
+				},
+			},
+		},
+		logout,
 	);
 
 	server.get(

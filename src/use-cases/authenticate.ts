@@ -1,5 +1,12 @@
 import { compare } from "bcryptjs";
 import type { User } from "@/generated/client/client";
+import {
+	type AuthTokenIssuer,
+	type AuthTokens,
+	refreshTokenExpiresAt,
+} from "@/lib/auth-tokens";
+import { hashToken } from "@/lib/token";
+import type { RefreshTokensRepository } from "@/repositories/refresh-tokens-repository";
 import type { UsersRepository } from "@/repositories/users-repository";
 import { InvalidCredentialsError } from "@/use-cases/errors/invalid-credentials-error";
 
@@ -8,12 +15,16 @@ interface AuthenticateUseCaseRequest {
 	password: string;
 }
 
-interface AuthenticateUseCaseResponse {
+interface AuthenticateUseCaseResponse extends AuthTokens {
 	user: User;
 }
 
 export class AuthenticateUseCase {
-	constructor(private usersRepository: UsersRepository) {}
+	constructor(
+		private usersRepository: UsersRepository,
+		private refreshTokensRepository: RefreshTokensRepository,
+		private tokenIssuer: AuthTokenIssuer,
+	) {}
 
 	async execute({
 		email,
@@ -31,6 +42,15 @@ export class AuthenticateUseCase {
 			throw new InvalidCredentialsError();
 		}
 
-		return { user };
+		const { token, refreshToken } = await this.tokenIssuer.issue(user.id);
+
+		// Persistido pelo HASH, nunca em texto puro (RNF07/RNF08).
+		await this.refreshTokensRepository.create({
+			userId: user.id,
+			tokenHash: hashToken(refreshToken),
+			expiresAt: refreshTokenExpiresAt(),
+		});
+
+		return { user, token, refreshToken };
 	}
 }

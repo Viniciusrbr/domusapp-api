@@ -1,5 +1,10 @@
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { AuthenticateBody } from "@/controllers/users/schemas";
+import {
+	makeJwtAuthTokenIssuer,
+	REFRESH_TOKEN_COOKIE,
+	refreshTokenCookieOptions,
+} from "@/lib/auth-tokens";
 import { InvalidCredentialsError } from "@/use-cases/errors/invalid-credentials-error";
 import { makeAuthenticateUseCase } from "@/use-cases/factories/make-authenticate-use-case";
 
@@ -10,27 +15,21 @@ export async function authenticate(
 	const { email, password } = request.body;
 
 	try {
-		const authenticateUseCase = makeAuthenticateUseCase();
-
-		const { user } = await authenticateUseCase.execute({ email, password });
-
-		// Access token curto (expiração vem do register do @fastify/jwt em app.ts).
-		const token = await reply.jwtSign({}, { sign: { sub: user.id } });
-
-		// Refresh token longo, entregue como cookie httpOnly.
-		// Obs: a rota de refresh + rotação persistida no banco (RNF08) ainda não existe.
-		const refreshToken = await reply.jwtSign(
-			{},
-			{ sign: { sub: user.id, expiresIn: "7d" } },
+		const authenticateUseCase = makeAuthenticateUseCase(
+			makeJwtAuthTokenIssuer(reply),
 		);
 
+		const { token, refreshToken } = await authenticateUseCase.execute({
+			email,
+			password,
+		});
+
 		return reply
-			.setCookie("refreshToken", refreshToken, {
-				path: "/",
-				secure: true, // em prod cross-domain: manter true + sameSite 'none' (RNF11)
-				sameSite: true,
-				httpOnly: true,
-			})
+			.setCookie(
+				REFRESH_TOKEN_COOKIE,
+				refreshToken,
+				refreshTokenCookieOptions(),
+			)
 			.status(200)
 			.send({ token });
 	} catch (error) {

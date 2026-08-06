@@ -17,6 +17,7 @@ import { householdsRoutes } from "./controllers/households/routes";
 import { tasksRoutes } from "./controllers/tasks/routes";
 import { usersRoutes } from "./controllers/users/routes";
 import { env } from "./env";
+import { REFRESH_TOKEN_COOKIE } from "./lib/auth-tokens";
 
 export const app = fastify();
 
@@ -28,18 +29,19 @@ app.register(fastifyCors, {
 	credentials: true,
 });
 
+// Antes do JWT: o refresh token é lido do cookie httpOnly (RNF08).
+app.register(fastifyCookie);
+
 app.register(fastifyJwt, {
 	secret: env.JWT_SECRET,
 	cookie: {
-		cookieName: "refreshToken",
+		cookieName: REFRESH_TOKEN_COOKIE,
 		signed: false,
 	},
 	sign: {
 		expiresIn: "10m",
 	},
 });
-
-app.register(fastifyCookie);
 
 await app.register(fastifySwagger, {
 	openapi: {

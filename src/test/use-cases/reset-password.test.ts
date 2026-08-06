@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { User } from "@/generated/client/client";
 import { generateToken, hashToken } from "@/lib/token";
 import { InMemoryPasswordResetTokensRepository } from "@/repositories/in-memory/in-memory-password-reset-tokens-repository";
+import { InMemoryRefreshTokensRepository } from "@/repositories/in-memory/in-memory-refresh-tokens-repository";
 import { InMemoryUsersRepository } from "@/repositories/in-memory/in-memory-users-repository";
 import { InvalidPasswordError } from "@/use-cases/errors/invalid-password-error";
 import { InvalidResetTokenError } from "@/use-cases/errors/invalid-reset-token-error";
@@ -11,6 +12,7 @@ import { ResetPasswordUseCase } from "@/use-cases/reset-password";
 
 let usersRepository: InMemoryUsersRepository;
 let passwordResetTokensRepository: InMemoryPasswordResetTokensRepository;
+let refreshTokensRepository: InMemoryRefreshTokensRepository;
 let sut: ResetPasswordUseCase;
 let user: User;
 
@@ -30,9 +32,11 @@ describe("Reset Password Use Case", () => {
 	beforeEach(async () => {
 		usersRepository = new InMemoryUsersRepository();
 		passwordResetTokensRepository = new InMemoryPasswordResetTokensRepository();
+		refreshTokensRepository = new InMemoryRefreshTokensRepository();
 		sut = new ResetPasswordUseCase(
 			usersRepository,
 			passwordResetTokensRepository,
+			refreshTokensRepository,
 		);
 
 		user = await usersRepository.create({
@@ -58,6 +62,24 @@ describe("Reset Password Use Case", () => {
 		);
 
 		expect(storedToken?.usedAt).toEqual(expect.any(Date));
+	});
+
+	it("should revoke the active refresh tokens of the user", async () => {
+		const { token } = await issueToken();
+
+		const refreshToken = await refreshTokensRepository.create({
+			userId: user.id,
+			tokenHash: hashToken(generateToken()),
+			expiresAt: dayjs().add(7, "day").toDate(),
+		});
+
+		await sut.execute({ token, password: "novasenha1" });
+
+		const storedToken = refreshTokensRepository.items.find(
+			(item) => item.id === refreshToken.id,
+		);
+
+		expect(storedToken?.revokedAt).toEqual(expect.any(Date));
 	});
 
 	it("should not be able to reset the password with an unknown token", async () => {

@@ -2,6 +2,7 @@ import { hash } from "bcryptjs";
 import { isStrongPassword } from "@/lib/password-policy";
 import { hashToken } from "@/lib/token";
 import type { PasswordResetTokensRepository } from "@/repositories/password-reset-tokens-repository";
+import type { RefreshTokensRepository } from "@/repositories/refresh-tokens-repository";
 import type { UsersRepository } from "@/repositories/users-repository";
 import { InvalidPasswordError } from "@/use-cases/errors/invalid-password-error";
 import { InvalidResetTokenError } from "@/use-cases/errors/invalid-reset-token-error";
@@ -15,6 +16,7 @@ export class ResetPasswordUseCase {
 	constructor(
 		private usersRepository: UsersRepository,
 		private passwordResetTokensRepository: PasswordResetTokensRepository,
+		private refreshTokensRepository: RefreshTokensRepository,
 	) {}
 
 	async execute({
@@ -55,7 +57,7 @@ export class ResetPasswordUseCase {
 		await this.usersRepository.save(user);
 		await this.passwordResetTokensRepository.markAsUsed(passwordResetToken.id);
 
-		// TODO: revogar os refresh tokens ativos do usuário quando o slice de
-		// refresh token existir (prompt 03).
+		// Trocar a senha derruba as sessões abertas em outros dispositivos (RNF08).
+		await this.refreshTokensRepository.revokeAllForUser(user.id);
 	}
 }
