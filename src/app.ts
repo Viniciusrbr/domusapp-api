@@ -12,6 +12,7 @@ import {
 	validatorCompiler,
 	type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { householdsRoutes } from "./controllers/households/routes";
 import { usersRoutes } from "./controllers/users/routes";
 import { env } from "./env";
 
@@ -69,6 +70,7 @@ app.register(fastifyApiReference, {
 });
 
 app.register(usersRoutes);
+app.register(householdsRoutes);
 
 app.withTypeProvider<ZodTypeProvider>().route({
 	method: "GET",

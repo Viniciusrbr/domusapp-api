@@ -28,3 +28,12 @@ export const authenticateResponseSchema = z.object({
 export const messageResponseSchema = z.object({
 	message: z.string(),
 });
+
+export const userProfileResponseSchema = z.object({
+	user: z.object({
+		id: z.string(),
+		name: z.string(),
+		email: z.email(),
+		createdAt: z.iso.datetime(),
+	}),
+});
