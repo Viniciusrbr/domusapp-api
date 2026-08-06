@@ -27,6 +27,7 @@ app.setSerializerCompiler(serializerCompiler);
 app.register(fastifyCors, {
 	origin: env.CORS_ORIGINS,
 	credentials: true,
+	methods: ["GET", "HEAD", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
 });
 
 // Antes do JWT: o refresh token é lido do cookie httpOnly (RNF08).
